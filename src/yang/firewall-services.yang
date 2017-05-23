@@ -1,0 +1,169 @@
+module firewall-services {
+
+  namespace "http://example.com/firewall-services";
+  prefix fw;
+
+  import ietf-inet-types {
+    prefix inet;
+  }
+  import tailf-common {
+    prefix tailf;
+  }
+  import tailf-ncs {
+    prefix ncs;
+  }
+  import tailf-ned-cisco-asa {
+    prefix asa;
+  }
+
+  description
+    "Services related to firewalls";
+
+  revision 2016-01-01 {
+    description
+      "Initial revision.";
+  }
+
+  grouping firewall-rule {
+    leaf device {
+      tailf:info "Device to place this rule in.  If no devices are present please configure "
+                 + "/services/firewall-services/firewall-services-config/firewall-device-group";
+      type leafref {
+        path "/ncs:devices/ncs:device-group["
+             + "ncs:name=current()/../../firewall-services-config"
+             + "/firewall-device-group]/ncs:device-name";
+      }
+    } 
+    container rule-set {
+      tailf:info "Name of the existing or new rule set to add this rule too";
+      when "../device";
+      choice rule-set {
+        mandatory true;
+        case new {
+          leaf new-rule-set {
+            tailf:info "Name of the rule set to create";
+            type string {
+              tailf:info "<string> - Name of the rule set to create";
+            }
+          }
+        }
+        case existing {
+          leaf existing-rule-set {
+            tailf:info "Name of the rule set to add this rule too";
+            type leafref {
+              path "/ncs:devices/ncs:device[ncs:name=current()/../../device]/ncs:config/asa:access-list/asa:access-list-id/asa:id";
+            }
+          }
+        }
+      }
+    }
+    leaf asa-rule {
+      tailf:info "Firewall rule";
+      when "../device and (../rule-set/new-rule-set or ../rule-set/existing-rule-set)";
+      mandatory true;
+      type string {
+        tailf:info "quoted<string> - eg. 'permit tcp any any eq 22'";
+      }
+      must "not(/ncs:devices/ncs:device[ncs:name=current()/../device]/"
+           + "ncs:config/asa:access-list/asa:access-list-id"
+           + "[asa:id=current()/../rule-set/existing-rule-set]/asa:rule"
+           + "[asa:id=current()]) or "
+           + "not(/ncs:devices/ncs:device[ncs:name=current()/../device]/"
+           + "ncs:config/asa:access-list/asa:access-list-id"
+           + "[asa:id=current()/../rule-set/new-rule-set]/asa:rule"
+           + "[asa:id=current()])" {
+        error-message "New rule already exists";
+      }
+    }
+    container rule-placement {
+      tailf:info "Where in the list of rules should this rule be placed";
+      when "../device and (../rule-set/new-rule-set or ../rule-set/existing-rule-set)";
+      choice rule-placement {
+        mandatory true;
+        case end;
+          leaf end-of-list {
+            type empty;
+          }
+        case after {
+          leaf place-after-rule {
+            when "../../rule-set/existing-rule-set";
+            tailf:info "Rule to place the new rule after";
+            type string;
+            tailf:non-strict-leafref {
+              path "/ncs:devices/ncs:device[ncs:name=current()/../../device]/ncs:config/asa:access-list/asa:access-list-id[asa:id=current()/../../rule-set/existing-rule-set]/asa:rule/asa:id";
+            }
+          }
+        }
+        case before {
+          leaf place-before-rule {
+            when "../../rule-set/existing-rule-set";
+            tailf:info "Rule to place the new rule before";
+            type leafref {
+              path "/ncs:devices/ncs:device[ncs:name=current()/../../device]/ncs:config/asa:access-list/asa:access-list-id[asa:id=current()/../../rule-set/existing-rule-set]/asa:rule/asa:id";
+            }
+          }
+        }
+      }
+    }
+  }
+
+  //AUGMENT_BEGIN
+  augment /ncs:services {
+    container firewall {
+      tailf:info "Firewall services";
+      container firewall-services-config {
+        tailf:info "Configuration settings for firewall services";
+        leaf firewall-device-group {
+          type leafref {
+            tailf:info "NSO group that contain Cisco ASA firewall devices";
+            path "/ncs:devices/ncs:device-group/ncs:name";
+          }
+        }
+          must "current()/firewall-device-group "
+                + "or /ncs:devices/ncs:device["
+                + "ncs:name=/ncs:devices/ncs:device-group["
+                + "ncs:name=current()/firewall-device-group]/ncs:device-name]"
+                + "/ncs:device-type/ncs:cli/ncs:ned-id = 'asa-id:cisco-asa'" {
+            error-message "Firewall device group must only contain Cisco ASA devices.";
+          }
+      }
+
+      list firewall-rule {
+        description "Service that provides firewall rule maintenance";
+        tailf:info "Firewall rule maintenance";
+        key name;
+        leaf name {
+          type string {
+            tailf:info "<string> Descriptive name for this rule";
+          }
+        }
+
+        uses ncs:service-data;
+        ncs:servicepoint firewall-rule;
+    
+        uses firewall-rule;
+        must "device" {
+          error-message "Device must be set for the firewall-rule service";
+        }
+        //If the service get redeployed we need to throw and error if we
+        // are placing this rule in reference to another rule that no
+        // longer exists because it has been deleted
+        must "rule-set/new-rule-set or (rule-set/existing-rule-set and "
+              + "(current()/rule-placement/end-of-list or "
+              + "/ncs:devices/ncs:device[ncs:name=current()/device]/"
+              + "ncs:config/asa:access-list/asa:access-list-id"
+              + "[asa:id=current()/rule-set/existing-rule-set]/asa:rule"
+              + "[asa:id=current()/rule-placement/place-before-rule] or "
+              + "/ncs:devices/ncs:device[ncs:name=current()/device]/"
+              + "ncs:config/asa:access-list/asa:access-list-id"
+              + "[asa:id=current()/rule-set/existing-rule-set]/asa:rule"
+              + "[asa:id=current()/rule-placement/place-after-rule]))" {
+          error-message "The rule that this rule is supposed to placed in "
+            + "reference to no longer is valid (probably was deleted), please reset "
+            + "rule placement value";
+        }
+      }
+    }
+  }
+  //AUGMENT_END
+}

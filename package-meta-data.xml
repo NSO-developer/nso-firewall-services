@@ -1,0 +1,13 @@
+<ncs-package xmlns="http://tail-f.com/ns/ncs-packages">
+  <name>firewall-services</name>
+  <package-version>1.0</package-version>
+  <description>Generated Python package</description>
+  <ncs-min-version>4.3</ncs-min-version>
+
+  <component>
+    <name>FirewallServices</name>
+    <application>
+      <python-class-name>firewall_services.FirewallServices.FirewallFilter</python-class-name>
+    </application>
+  </component>
+</ncs-package>

@@ -1,0 +1,48 @@
+<config-template xmlns="http://tail-f.com/ns/config/1.0"
+                 servicepoint="firewall-rule">
+  <devices xmlns="http://tail-f.com/ns/ncs">
+  <device>
+    <name>{/device}</name>
+      <config>
+      <access-list xmlns="http://cisco.com/ned/asa">
+      <access-list-id when="{/rule-set/new-rule-set}" tags="merge">
+        <id>{/rule-set/new-rule-set}</id>
+        <rule when="{/rule-placement/end-of-list}">
+          <id>{/asa-rule}</id>
+        </rule>
+        <rule when="{/rule-placement/place-after-rule}"
+              tags="create"
+              insert="after"
+              value="{/rule-placement/place-after-rule}">
+          <id>{/asa-rule}</id>
+        </rule>
+        <rule when="{/rule-placement/place-before-rule}"
+              tags="create"
+              insert="before"
+              value="{/rule-placement/place-before-rule}">
+          <id>{/asa-rule}</id>
+        </rule>
+      </access-list-id>
+      <access-list-id when="{/rule-set/existing-rule-set}">
+        <id>{/rule-set/existing-rule-set}</id>
+        <rule when="{/rule-placement/end-of-list}">
+          <id>{/asa-rule}</id>
+        </rule>
+        <rule when="{/rule-placement/place-after-rule}"
+              tags="create"
+              insert="after"
+              value="{/rule-placement/place-after-rule}">
+          <id>{/asa-rule}</id>
+        </rule>
+        <rule when="{/rule-placement/place-before-rule}"
+              tags="create"
+              insert="before"
+              value="{/rule-placement/place-before-rule}">
+          <id>{/asa-rule}</id>
+        </rule>
+      </access-list-id>
+      </access-list>
+      </config>
+  </device>
+  </devices>
+</config-template>
